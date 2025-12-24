@@ -19,24 +19,16 @@
       font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans SC","Microsoft YaHei",system-ui,Segoe UI,Roboto,Helvetica,Arial;
     }
     body{ overflow:hidden; }
+    #stage{ position:fixed; inset:0; width:100vw; height:100vh; display:block; touch-action:none; }
 
-    #stage{
-      position:fixed; inset:0;
-      width:100vw; height:100vh;
-      display:block;
-      touch-action:none;
-    }
-
-    /* 摄像头输入隐藏 */
     video#cam{
       position:fixed;
       width:1px; height:1px;
       opacity:0;
       pointer-events:none;
-      left:-10px; top:-10px;
+      left:-20px; top:-20px;
     }
 
-    /* 入口遮罩 */
     #gate{
       position:fixed; inset:0;
       display:flex; align-items:center; justify-content:center;
@@ -59,10 +51,8 @@
       -webkit-backdrop-filter: blur(10px);
     }
     .title{
-      font-size:16px; letter-spacing:.6px;
-      color:rgba(255,255,255,.92);
-      display:flex; align-items:center; gap:10px;
-      margin:0 0 10px;
+      font-size:16px; letter-spacing:.6px; color:rgba(255,255,255,.92);
+      display:flex; align-items:center; gap:10px; margin:0 0 10px;
     }
     .badge{
       width:10px; height:10px; border-radius:50%;
@@ -70,12 +60,7 @@
       box-shadow:0 0 18px rgba(255,255,255,.5);
       flex:none;
     }
-    .hint{
-      margin:0 0 12px;
-      color:var(--muted);
-      font-size:13px;
-      line-height:1.55;
-    }
+    .hint{ margin:0 0 12px; color:var(--muted); font-size:13px; line-height:1.55; }
     .row{ display:flex; gap:10px; align-items:center; }
     input{
       flex:1;
@@ -101,7 +86,7 @@
     }
     button:active{ transform:translateY(1px); }
 
-    /* 字幕条：滑入 -> 打字 -> 滑出 */
+    /* 字幕条 */
     #subs{
       position:fixed;
       left:50%;
@@ -138,10 +123,7 @@
     .subline.exit{ transform:translateY(18px); opacity:0; }
 
     .caret{
-      display:inline-block;
-      width:10px;
-      margin-left:3px;
-      opacity:.9;
+      display:inline-block; width:10px; margin-left:3px; opacity:.9;
       animation:blink 1s steps(1) infinite;
     }
     @keyframes blink { 50%{ opacity:0; } }
@@ -154,11 +136,9 @@
       transform:translateX(-50%);
       z-index:15;
       opacity:0;
-      transition:opacity .6s ease;
+      transition:opacity .45s ease;
       pointer-events:none;
-      display:flex;
-      align-items:center;
-      gap:10px;
+      display:flex; align-items:center; gap:10px;
       white-space:nowrap;
     }
     #cornerTip.on{ opacity:1; }
@@ -176,12 +156,27 @@
     }
     .pill b{ color:rgba(255,255,255,.88); font-weight:900; }
 
-    @media (prefers-reduced-motion: reduce){
-      .subline{ transition:none; }
-      #gate{ transition:none; }
-      .caret{ animation:none; }
-      #cornerTip{ transition:none; }
+    /* Debug 面板（?debug=1） */
+    #debug{
+      position:fixed;
+      left:12px;
+      bottom:12px;
+      z-index:50;
+      font-size:12px;
+      line-height:1.4;
+      padding:10px 10px;
+      border-radius:14px;
+      border:1px solid rgba(255,255,255,.14);
+      background:rgba(0,0,0,.45);
+      color:rgba(255,255,255,.72);
+      box-shadow:0 14px 50px rgba(0,0,0,.65);
+      display:none;
+      min-width:220px;
+      pointer-events:none;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
     }
+    #debug.on{ display:block; }
   </style>
 </head>
 
@@ -193,8 +188,8 @@
     <div class="card">
       <div class="title"><span class="badge"></span>圣诞夜 · 粒子贺卡</div>
       <p class="hint">
-        输入名字，点“点亮”。会尝试开启摄像头：你挥手就能触发星光炸开（不开也没关系，照样拖动旋转）。
-        <br/>（摄像头需要 HTTPS 或 localhost）
+        输入名字，点“点亮”。会尝试开启摄像头：挥手触发星光炸开。<br/>
+        也支持：拖动旋转 + 俯仰，轻点炸开（不管摄像头成不成都能玩）。
       </p>
       <div class="row">
         <input id="name" maxlength="12" placeholder="输入名字（例如：小猫咪）" />
@@ -204,13 +199,15 @@
   </div>
 
   <div id="cornerTip">
-    <span class="pill">拖动旋转 · 轻点炸开</span>
+    <span class="pill">拖动：旋转+俯仰 · 轻点：炸开</span>
     <span class="pill" id="camStatus">摄像头：<b>未开启</b></span>
   </div>
 
   <div id="subs">
     <div class="subline" id="subline"></div>
   </div>
+
+  <div id="debug"></div>
 
   <script type="module">
     import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
@@ -224,6 +221,10 @@
     const cornerTip = document.getElementById("cornerTip");
     const camEl = document.getElementById("cam");
     const camStatus = document.getElementById("camStatus");
+    const debugEl = document.getElementById("debug");
+
+    const DEBUG = new URLSearchParams(location.search).has("debug");
+    if (DEBUG) debugEl.classList.add("on");
 
     const sleep = (ms)=> new Promise(r=>setTimeout(r, ms));
 
@@ -232,7 +233,7 @@
       subline.classList.remove("exit");
       subline.classList.add("enter");
       subline.innerHTML = "";
-      await sleep(240);
+      await sleep(220);
 
       const caret = document.createElement("span");
       caret.className = "caret";
@@ -250,7 +251,6 @@
       subline.classList.add("exit");
       await sleep(320);
     }
-
     async function hideSubs(){
       subline.classList.remove("enter");
       subline.classList.add("exit");
@@ -258,15 +258,17 @@
       subs.classList.remove("on");
     }
 
-    // ===================== 摄像头运动检测（挥手触发） =====================
+    // ===================== 摄像头运动检测（自适应阈值） =====================
     const cam = {
-      enabled:false,
-      ready:false,
-      stream:null,
-      w:112, h:84,          // 采样分辨率（更高更敏感，但更吃）
+      enabled:false, ready:false, stream:null,
+      w:120, h:90,
       c:null, ctx:null,
       prev:null,
-      cooldown:0
+      cooldown:0,
+      baseline:0,     // 环境运动噪声基线（EMA）
+      thr:16,         // 动态阈值
+      lastMotion:0,
+      lastBias:0
     };
 
     function setCamStatus(text, ok=false){
@@ -301,14 +303,15 @@
         cam.ctx = cam.c.getContext("2d", { willReadFrequently:true });
 
         cam.prev = new Uint8Array(cam.w * cam.h);
-        cam.ready = true;
         cam.enabled = true;
+        cam.ready = true;
+        cam.baseline = 0;
         setCamStatus("已开启", true);
         return true;
       }catch(_){
         setCamStatus("被拒绝", false);
-        cam.ready = false;
         cam.enabled = false;
+        cam.ready = false;
         return false;
       }
     }
@@ -316,14 +319,11 @@
     function stopCamera(){
       try{ cam.stream?.getTracks?.().forEach(t=>t.stop()); }catch(_){}
       cam.stream = null;
-      cam.ready = false;
       cam.enabled = false;
+      cam.ready = false;
       setCamStatus("未开启", false);
     }
 
-    // 返回 {motion, bias}
-    // motion：整体运动强度（越大越“挥手”）
-    // bias：左右不均衡（>0右侧更动，<0左侧更动）
     function detectMotion(){
       if(!cam.ready || !cam.enabled) return { motion:0, bias:0 };
 
@@ -331,7 +331,7 @@
       const data = cam.ctx.getImageData(0, 0, cam.w, cam.h).data;
 
       let sum=0, sumL=0, sumR=0;
-      const step = 2; // 2 像素采样一次
+      const step = 2;
       for(let y=0;y<cam.h;y+=step){
         for(let x=0;x<cam.w;x+=step){
           const idx = y*cam.w + x;
@@ -348,33 +348,36 @@
       }
 
       const samples = (Math.ceil(cam.h/step) * Math.ceil(cam.w/step));
-      const motion = sum / samples;                     // 0..255
-      const bias = sum > 1 ? (sumR - sumL) / sum : 0;   // -1..1
+      const motion = sum / samples;
+      const bias = sum > 1 ? (sumR - sumL) / sum : 0;
+
+      // 基线跟随：环境噪声越大，阈值自动抬高
+      cam.baseline = cam.baseline * 0.94 + motion * 0.06;
+      cam.thr = Math.max(10.0, cam.baseline + 6.2); // 6.2 这个数决定“敏感度”
+
+      cam.lastMotion = motion;
+      cam.lastBias = bias;
       return { motion, bias };
     }
 
-    // ===================== Three.js 粒子树 =====================
+    // ===================== Three.js 粒子树（更“明显”的交互） =====================
     const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:false, powerPreference:"high-performance" });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setSize(window.innerWidth, window.innerHeight, false);
 
     const scene = new THREE.Scene();
-    // 几乎不影响可见度的雾（别再把树雾没了）
-    scene.fog = new THREE.Fog(0x000000, 14, 40);
+    scene.fog = new THREE.Fog(0x000000, 14, 44);
 
     const camera3 = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 120);
-    // 拉近一点 + 更聚焦
-    camera3.position.set(0, 1.05, 7.2);
+    camera3.position.set(0, 1.05, 7.0);
 
     const root = new THREE.Group();
-    // 直接放大树：强到你闭眼都看得见
-    root.scale.setScalar(1.28);
+    root.scale.setScalar(1.30);
     scene.add(root);
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+    scene.add(new THREE.AmbientLight(0xffffff, 0.22));
 
     const HEIGHT = 4.6;
-    const BASE_RADIUS = 2.2;
     const LAYERS = 7;
 
     const treeCols = ["#0B3D0B","#144514","#006400"].map(s=>new THREE.Color(s));
@@ -390,7 +393,6 @@
       return Math.sqrt(-2.0*Math.log(u))*Math.cos(2.0*Math.PI*v);
     }
 
-    // 动态数组：leaf / decor / ribbon / trunk / snow
     const P=[], C=[], S=[], D=[], K=[], A=[], SP=[];
     function addPoint(x,y,z, color, scale, kind, alpha, speed=0){
       P.push(x,y,z);
@@ -403,22 +405,18 @@
       SP.push(speed);
     }
 
-    // leaves（更多点，让体积扎实）
+    // leaf
     for(let i=0;i<12000;i++){
-      const h = Math.random();                 // 0..1
+      const h = Math.random();
       const base_r = (1 - h);
       const layer_cycle = (h * LAYERS) % 1;
-
-      const r = base_r * 0.65 * (0.38 + 0.62 * Math.pow(1 - layer_cycle, 0.7));
+      const r = base_r * 0.72 * (0.38 + 0.62 * Math.pow(1 - layer_cycle, 0.7));
       const theta = Math.random() * Math.PI * 2;
-
-      const x = r * Math.cos(theta) + randn()*0.05;
-      const z = r * Math.sin(theta) + randn()*0.05;
+      const x = r*Math.cos(theta) + randn()*0.05;
+      const z = r*Math.sin(theta) + randn()*0.05;
       const y = (h - 0.5) * HEIGHT;
-
       const col = treeCols[(Math.random()*treeCols.length)|0];
-      const size = 0.65 + Math.random()*1.35;
-      addPoint(x,y,z,col,size,0.0,0.95);
+      addPoint(x,y,z,col,0.7 + Math.random()*1.35,0.0,0.95);
     }
 
     // trunk
@@ -426,50 +424,42 @@
       const y = (-0.72 + Math.random()*0.28) * HEIGHT;
       const r = 0.12;
       const t = Math.random()*Math.PI*2;
-      const x = Math.cos(t)*r + randn()*0.012;
-      const z = Math.sin(t)*r + randn()*0.012;
-      addPoint(x,y,z,trunkCol,1.35,3.0,1.0);
+      addPoint(Math.cos(t)*r + randn()*0.012, y, Math.sin(t)*r + randn()*0.012, trunkCol, 1.35, 3.0, 1.0);
     }
 
     // decor
-    for(let i=0;i<1050;i++){
-      const h = Math.random()*0.96;
+    for(let i=0;i<1100;i++){
+      const h = Math.random()*0.97;
       const base_r = (1 - h);
       const layer_cycle = (h * LAYERS) % 1;
-      const r = base_r * 0.70 * (0.36 + 0.64 * Math.pow(1 - layer_cycle, 0.72));
+      const r = base_r * 0.76 * (0.36 + 0.64 * Math.pow(1 - layer_cycle, 0.72));
       const theta = Math.random()*Math.PI*2;
-
       const x = r*Math.cos(theta);
       const z = r*Math.sin(theta);
       const y = (h - 0.5)*HEIGHT;
-
       const col = decorCols[(Math.random()*decorCols.length)|0];
-      const size = 1.45 + Math.random()*1.55;
-      addPoint(x,y,z,col,size,1.0,1.0);
+      addPoint(x,y,z,col, 1.55 + Math.random()*1.6, 1.0, 1.0);
     }
 
-    // ribbon (more)
-    const ribbonN = 7800;
+    // ribbon
+    const ribbonN = 8200;
     for(let i=0;i<ribbonN;i++){
-      const h = (i/(ribbonN-1))*0.96;
-      const base_r = (1 - h) * 0.68 * 1.06;
-      const theta = 10.5 * Math.PI * h;
-
+      const h = (i/(ribbonN-1))*0.97;
+      const base_r = (1 - h) * 0.78;
+      const theta = 10.7 * Math.PI * h;
       const x = base_r*Math.cos(theta);
       const z = base_r*Math.sin(theta);
       const y = (h - 0.5)*HEIGHT;
-
-      addPoint(x,y,z,ribbonCol,1.05,2.0,0.92);
+      addPoint(x,y,z,ribbonCol, 1.1, 2.0, 0.92);
     }
 
     // snow
-    for(let i=0;i<420;i++){
-      const x = (Math.random()*2 - 1) * 1.35;
-      const z = (Math.random()*2 - 1) * 1.35;
-      const y0 = (-1.0 + Math.random()*2.4) * (HEIGHT*0.55);
-      const speed = 0.28 + Math.random()*0.62;
-      const size = 0.55 + Math.random()*1.55;
-      addPoint(x,y0,z,snowCol,size,4.0,0.55 + Math.random()*0.35,speed);
+    for(let i=0;i<520;i++){
+      const x = (Math.random()*2 - 1) * 1.45;
+      const z = (Math.random()*2 - 1) * 1.45;
+      const y0 = (-1.05 + Math.random()*2.55) * (HEIGHT*0.55);
+      const speed = 0.26 + Math.random()*0.70;
+      addPoint(x,y0,z,snowCol, 0.6 + Math.random()*1.6, 4.0, 0.55 + Math.random()*0.35, speed);
     }
 
     const geometry = new THREE.BufferGeometry();
@@ -483,15 +473,16 @@
 
     const uniforms = {
       uTime:   { value: 0 },
-      uSize:   { value: 7.6 },   // 关键：更强、更大
+      uSize:   { value: 8.2 },  // 更强
       uBurst:  { value: 0 },
-      uFadeIn: { value: 0 }
+      uFadeIn: { value: 0 },
+      uFlash:  { value: 0 }     // 炸开瞬间的整体“亮一下”
     };
 
     const material = new THREE.ShaderMaterial({
       transparent:true,
       depthWrite:false,
-      blending:THREE.AdditiveBlending, // 关键：发光叠加
+      blending:THREE.AdditiveBlending,
       uniforms,
       vertexShader: `
         attribute vec3 aBase;
@@ -511,6 +502,7 @@
         uniform float uSize;
         uniform float uBurst;
         uniform float uFadeIn;
+        uniform float uFlash;
 
         void main(){
           vColor = aColor;
@@ -518,31 +510,31 @@
           vAlpha = aAlpha;
 
           float seed = aBase.y*2.6 + aBase.x*3.1 + aBase.z*2.9;
-
           float twBase = 0.55 + 0.45 * sin(uTime*1.7 + seed);
+
           float amp = 0.22;
-          if (aKind < 0.5) amp = 0.22;            // tree
-          else if (aKind < 1.5) amp = 0.48;       // decor
-          else if (aKind < 2.5) amp = 0.34;       // ribbon
-          else if (aKind < 3.5) amp = 0.10;       // trunk
-          else amp = 0.12;                         // snow
-          vTw = 0.76 + twBase * amp;
+          if (aKind < 0.5) amp = 0.22;
+          else if (aKind < 1.5) amp = 0.55;
+          else if (aKind < 2.5) amp = 0.40;
+          else if (aKind < 3.5) amp = 0.12;
+          else amp = 0.14;
+          vTw = 0.78 + twBase * amp + uFlash*0.10;
 
           vec3 p = aBase;
 
           if (aKind > 3.5) {
             float fall = mod(uTime * aSpeed, 6.0);
             p.y = aBase.y - fall;
-            if (p.y < -3.35) p.y += 6.0;
+            if (p.y < -3.45) p.y += 6.0;
           } else {
-            p += aDir * (uBurst * 1.45); // 关键：炸开更远
+            p += aDir * (uBurst * 1.65);
           }
 
           vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
-          float distScale = 260.0 / max(1.0, -mvPosition.z); // 关键：点更明显
+          float distScale = 280.0 / max(1.0, -mvPosition.z);
 
           float ps = aScale * uSize * distScale * vTw * uFadeIn;
-          gl_PointSize = clamp(ps, 1.0, 18.0); // 关键：更大但有限制
+          gl_PointSize = clamp(ps, 1.0, 20.0);
           gl_Position = projectionMatrix * mvPosition;
         }
       `,
@@ -552,27 +544,28 @@
         varying float vTw;
         varying float vAlpha;
         varying float vKind;
+
         uniform float uFadeIn;
+        uniform float uFlash;
 
         void main(){
           vec2 uv = gl_PointCoord.xy - 0.5;
           float d = length(uv);
 
-          // 核心更大，光晕更厚，但仍控制白化
-          float core = smoothstep(0.32, 0.0, d);
-          float halo = smoothstep(0.62, 0.24, d) * 0.26;
+          float core = smoothstep(0.34, 0.0, d);
+          float halo = smoothstep(0.70, 0.24, d) * 0.34;
 
           float a = (core * 0.92 + halo) * vAlpha * (0.78 + vTw*0.32) * uFadeIn;
 
           float bright = 1.0;
-          if (vKind > 0.5 && vKind < 1.5) bright = 1.55;      // decor
-          else if (vKind > 1.5 && vKind < 2.5) bright = 1.25; // ribbon
-          else if (vKind > 2.5 && vKind < 3.5) bright = 0.80; // trunk
+          if (vKind > 0.5 && vKind < 1.5) bright = 1.70;      // decor
+          else if (vKind > 1.5 && vKind < 2.5) bright = 1.28; // ribbon
+          else if (vKind > 2.5 && vKind < 3.5) bright = 0.75; // trunk
           else if (vKind > 3.5) bright = 1.05;                // snow
 
-          vec3 col = vColor * bright;
+          vec3 col = vColor * bright * (1.0 + uFlash*0.18);
 
-          if (a < 0.004) discard;
+          if (a < 0.0035) discard;
           gl_FragColor = vec4(col, a);
         }
       `
@@ -581,106 +574,153 @@
     const points = new THREE.Points(geometry, material);
     root.add(points);
 
-    // 顶部星（更亮一点）
     const star = new THREE.Mesh(
-      new THREE.SphereGeometry(0.065, 16, 16),
+      new THREE.SphereGeometry(0.07, 16, 16),
       new THREE.MeshBasicMaterial({ color: 0xffffff })
     );
-    star.position.set(0, HEIGHT*0.52 + 0.28, 0);
+    star.position.set(0, HEIGHT*0.52 + 0.30, 0);
     root.add(star);
 
+    // 让旋转更“看得见”：加点倾斜基准
     root.rotation.y = 0.35;
+    root.rotation.x = -0.08;
 
-    // ===================== 互动（拖动/轻点） =====================
+    // ===================== 交互：旋转+俯仰（非常明显） =====================
     let started = false;
+
     let isDown = false;
-    let lastX = 0;
-    let rotTarget = root.rotation.y;
-    let tapStart = 0;
-    let moved = 0;
+    let lastX = 0, lastY = 0;
+    let rotYTarget = root.rotation.y;
+    let rotXTarget = root.rotation.x;
+
+    let tapStart = 0, moved = 0;
 
     function onDown(e){
       isDown = true;
       moved = 0;
       tapStart = performance.now();
-      lastX = (e.touches ? e.touches[0].clientX : e.clientX);
+
+      const pt = e.touches ? e.touches[0] : e;
+      lastX = pt.clientX;
+      lastY = pt.clientY;
+
+      if (e.pointerId != null && canvas.setPointerCapture) {
+        try{ canvas.setPointerCapture(e.pointerId); }catch(_){}
+      }
     }
+
     function onMove(e){
       if(!isDown) return;
-      const x = (e.touches ? e.touches[0].clientX : e.clientX);
-      const dx = x - lastX;
-      lastX = x;
-      moved += Math.abs(dx);
-      rotTarget += dx * 0.006;
+      const pt = e.touches ? e.touches[0] : e;
+
+      const dx = pt.clientX - lastX;
+      const dy = pt.clientY - lastY;
+      lastX = pt.clientX;
+      lastY = pt.clientY;
+
+      moved += Math.abs(dx) + Math.abs(dy);
+
+      // 敏感度加大：你会明显看到变化
+      rotYTarget += dx * 0.010;
+      rotXTarget += dy * 0.006;
+
+      // 限制俯仰范围，避免翻车
+      rotXTarget = Math.max(-0.55, Math.min(0.20, rotXTarget));
     }
+
     function onUp(){
       if(!isDown) return;
       isDown = false;
+
       const dt = performance.now() - tapStart;
-      if(dt < 230 && moved < 10) burstPulse();
+      if(dt < 260 && moved < 18) burstPulse(1.0);
     }
 
     canvas.addEventListener("pointerdown", onDown, { passive:true });
-    window.addEventListener("pointermove", onMove, { passive:true });
-    window.addEventListener("pointerup", onUp, { passive:true });
+    canvas.addEventListener("pointermove", onMove, { passive:true });
+    canvas.addEventListener("pointerup", onUp, { passive:true });
+    canvas.addEventListener("pointercancel", onUp, { passive:true });
+
     canvas.addEventListener("touchstart", onDown, { passive:true });
-    window.addEventListener("touchmove", onMove, { passive:true });
-    window.addEventListener("touchend", onUp, { passive:true });
+    canvas.addEventListener("touchmove", onMove, { passive:true });
+    canvas.addEventListener("touchend", onUp, { passive:true });
+    canvas.addEventListener("touchcancel", onUp, { passive:true });
 
-    let burstV = 0, burstT = 0;
-    function burstPulse(){ burstT = 1; }
+    // ===================== 炸开（更强反馈） =====================
+    let burstV = 0, burstDir = 0;
+    let flashV = 0;
 
-    // ===================== 渲染 + 摄像头控制 =====================
+    function burstPulse(strength=1.0){
+      burstDir = 1;
+      burstV = Math.max(burstV, 0.15);
+      flashV = Math.max(flashV, 0.65 * strength);
+    }
+
+    // ===================== 渲染循环 + 摄像头驱动 =====================
     let t0 = performance.now();
     let lastT = 0;
 
     function animate(){
       requestAnimationFrame(animate);
+
       const t = (performance.now() - t0) / 1000;
       const dt = Math.min(0.05, Math.max(0.001, t - lastT));
       lastT = t;
 
       uniforms.uTime.value = t;
 
-      if(started) uniforms.uFadeIn.value = Math.min(1, uniforms.uFadeIn.value + 0.03);
+      if(started) uniforms.uFadeIn.value = Math.min(1, uniforms.uFadeIn.value + 0.05);
       else uniforms.uFadeIn.value = 0;
 
-      // 摄像头挥手触发
+      // 摄像头：挥手更容易触发 + 左右明显带动
       if(started && cam.enabled && cam.ready){
         cam.cooldown = Math.max(0, cam.cooldown - dt);
 
         const { motion, bias } = detectMotion();
 
-        // 阈值：更灵敏一点（树强了，挥手反馈也要强）
-        const THRESH = 14.5;
+        // 左右偏移带动旋转（明显一点）
+        rotYTarget += bias * 0.10;
 
-        // 左右挥动 -> 旋转更明显
-        rotTarget += bias * 0.08;
-
-        // 大幅运动 -> 炸开
-        if(motion > THRESH && cam.cooldown <= 0){
-          burstPulse();
-          cam.cooldown = 0.38;
+        // motion 超过动态阈值触发
+        if(motion > cam.thr && cam.cooldown <= 0){
+          burstPulse(1.0);
+          cam.cooldown = 0.30;
         }
       }
 
-      root.rotation.y += (rotTarget - root.rotation.y) * 0.09;
-      root.rotation.y += Math.sin(t*0.18) * 0.0008;
+      // 平滑趋近目标
+      root.rotation.y += (rotYTarget - root.rotation.y) * 0.14;
+      root.rotation.x += (rotXTarget - root.rotation.x) * 0.12;
 
       // 星星呼吸
-      star.scale.setScalar(0.92 + 0.10*Math.sin(t*2.2));
+      star.scale.setScalar(0.92 + 0.12*Math.sin(t*2.2));
 
-      // 炸开动画（更“啪”）
-      if(burstT > 0){
-        burstV = Math.min(1, burstV + 0.22);
-        if(burstV >= 1) burstT = -1;
-      }else if(burstT < 0){
-        burstV = Math.max(0, burstV - 0.13);
-        if(burstV <= 0) burstT = 0;
+      // Burst 动画
+      if(burstDir > 0){
+        burstV = Math.min(1.0, burstV + 0.28);
+        if(burstV >= 1.0) burstDir = -1;
+      } else if(burstDir < 0){
+        burstV = Math.max(0.0, burstV - 0.18);
+        if(burstV <= 0.0) burstDir = 0;
       }
       uniforms.uBurst.value = burstV;
 
+      // Flash 衰减
+      flashV = Math.max(0, flashV - dt*1.6);
+      uniforms.uFlash.value = flashV;
+
       renderer.render(scene, camera3);
+
+      if(DEBUG){
+        debugEl.innerHTML =
+          `started: ${started}<br/>` +
+          `cam: ${cam.enabled && cam.ready}<br/>` +
+          `motion: ${cam.lastMotion.toFixed(1)}<br/>` +
+          `thr: ${cam.thr.toFixed(1)} (base ${cam.baseline.toFixed(1)})<br/>` +
+          `bias: ${cam.lastBias.toFixed(2)}<br/>` +
+          `burst: ${burstV.toFixed(2)} flash: ${flashV.toFixed(2)}<br/>` +
+          `rotY: ${root.rotation.y.toFixed(2)} rotX: ${root.rotation.x.toFixed(2)}`;
+      }
     }
     animate();
 
@@ -689,36 +729,39 @@
       const raw = (nameInput.value || "").trim();
       const who = raw ? raw : "你";
 
-      // 点击触发摄像头授权
       await startCamera();
 
       gate.classList.add("hide");
-      await sleep(380);
+      await sleep(360);
       gate.style.display = "none";
 
-      await showSubtitle(`${who}，圣诞夜我在你身边。`, 28, 900);
-      await showSubtitle(`你点亮我，我才有光。`, 28, 900);
-
-      if(cam.enabled && cam.ready){
-        await showSubtitle(`挥手触发星光炸开，或者拖动旋转这棵树。`, 24, 850);
-      }else{
-        await showSubtitle(`拖动旋转，轻点让星光炸开。`, 24, 850);
-      }
-
+      // 提前启动视觉（字幕期间就能看到树在亮起来）
       started = true;
       cornerTip.classList.add("on");
+
+      await showSubtitle(`${who}，圣诞夜我在你身边。`, 28, 800);
+      await showSubtitle(`你点亮我，我才有光。`, 28, 800);
+
+      if(cam.enabled && cam.ready){
+        await showSubtitle(`挥手：星光炸开 · 拖动：旋转俯仰 · 轻点：炸开`, 22, 900);
+      }else{
+        await showSubtitle(`拖动：旋转俯仰 · 轻点：炸开`, 22, 900);
+      }
+
       await hideSubs();
+      // 给一句“开场”反馈：让用户立刻知道“能用”
+      burstPulse(1.0);
     }
 
     goBtn.addEventListener("click", startFlow);
-    nameInput.addEventListener("keydown", (e)=>{ if(e.key === "Enter") startFlow(); });
-    setTimeout(()=> nameInput.focus(), 180);
+    nameInput.addEventListener("keydown", (e)=>{ if(e.key==="Enter") startFlow(); });
+    setTimeout(()=> nameInput.focus(), 160);
 
     function onResize(){
       const w = window.innerWidth;
       const h = window.innerHeight;
       renderer.setSize(w, h, false);
-      camera3.aspect = w / h;
+      camera3.aspect = w/h;
       camera3.updateProjectionMatrix();
     }
     window.addEventListener("resize", onResize);
