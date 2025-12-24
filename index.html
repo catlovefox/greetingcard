@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <title>圣诞夜 · 粒子贺卡</title>
+  <title>输入Merry Christmas</title>
   <style>
     :root{
       --bg:#000; --fg:#fff; --muted:rgba(255,255,255,.72);
@@ -58,17 +58,20 @@
 
     #cornerTip{
       position:fixed; top:max(14px, env(safe-area-inset-top)); left:50%; transform:translateX(-50%);
-      z-index:15; opacity:0; transition:opacity .35s ease; pointer-events:none;
+      z-index:15; opacity:0; transition:opacity .35s ease; pointer-events:auto;
       display:flex; align-items:center; gap:10px; white-space:nowrap;
     }
     #cornerTip.on{ opacity:1; }
     .pill{
+      pointer-events:none;
       padding:6px 10px; border-radius:999px;
       border:1px solid rgba(255,255,255,.14); background:rgba(0,0,0,.35);
       color:rgba(255,255,255,.62); box-shadow:0 10px 30px rgba(0,0,0,.4);
       font-size:12px; letter-spacing:.3px; text-shadow:0 2px 16px rgba(0,0,0,.8);
     }
     .pill b{ color:rgba(255,255,255,.88); font-weight:900; }
+    .pill.btn{ pointer-events:auto; cursor:pointer; user-select:none; }
+    .pill.btn:active{ transform:translateY(1px); }
 
     #subs{
       position:fixed; left:50%; bottom:max(16px, env(safe-area-inset-bottom)); transform:translateX(-50%);
@@ -106,16 +109,17 @@
 <body>
   <canvas id="stage"></canvas>
   <video id="cam" playsinline muted></video>
+  <audio id="bgm" loop preload="auto" src="bgm.mp3"></audio>
 
   <div id="gate">
     <div class="card">
-      <div class="title"><span class="badge"></span>圣诞夜 · 粒子贺卡</div>
+      <div class="title"><span class="badge"></span>Merry Christmas</div>
       <p class="hint">
-        点亮后：拖动旋转+俯仰，轻点散开。<br/>
-        摄像头能开：挥手散开，不挥就聚回去。
+        点亮后...<br/>
+        试试挥挥手
       </p>
       <div class="row">
-        <input id="name" maxlength="12" placeholder="输入名字（例如：小猫咪）" />
+        <input id="name" maxlength="12" placeholder="输入名字" />
         <button id="go">点亮</button>
       </div>
     </div>
@@ -123,6 +127,7 @@
 
   <div id="cornerTip">
     <span class="pill">拖动：旋转+俯仰 · 轻点：散开</span>
+    <span class="pill btn" id="musicToggle">音乐：<b>关</b></span>
     <span class="pill" id="camStatus">摄像头：<b>未开启</b></span>
   </div>
 
@@ -141,6 +146,8 @@
     const cornerTip = document.getElementById("cornerTip");
     const camEl = document.getElementById("cam");
     const camStatus = document.getElementById("camStatus");
+    const bgm = document.getElementById("bgm");
+    const musicToggle = document.getElementById("musicToggle");
     const debugEl = document.getElementById("debug");
 
     const DEBUG = new URLSearchParams(location.search).has("debug");
@@ -171,6 +178,46 @@
       subline.classList.add("exit");
       await sleep(320);
     }
+
+    // ========= 背景音乐（必须用户手势触发） =========
+    let musicOn = false;
+
+    function setMusicUI(on){
+      musicOn = on;
+      if(!musicToggle) return;
+      musicToggle.innerHTML = `音乐：<b>${on ? "开" : "关"}</b>`;
+      const b = musicToggle.querySelector("b");
+      if(b) b.style.color = on ? "rgba(120,255,190,.92)" : "rgba(255,255,255,.88)";
+    }
+
+    async function tryPlayMusic(){
+      if(!bgm) return false;
+      bgm.volume = 0.32;
+      bgm.loop = true;
+      try{
+        await bgm.play();
+        setMusicUI(true);
+        return true;
+      }catch(_){
+        setMusicUI(false);
+        return false;
+      }
+    }
+
+    function stopMusic(){
+      if(!bgm) return;
+      try{ bgm.pause(); }catch(_){}
+      setMusicUI(false);
+    }
+
+    if(musicToggle){
+      musicToggle.addEventListener("click", async (e)=>{
+        e.preventDefault(); e.stopPropagation();
+        if(musicOn) stopMusic();
+        else await tryPlayMusic();
+      }, { passive:false });
+    }
+
     async function hideSubs(){
       subline.classList.remove("enter");
       subline.classList.add("exit");
@@ -260,10 +307,10 @@
     scene.fog = new THREE.Fog(0x000000, 14, 44);
 
     const camera3 = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 120);
-    camera3.position.set(0, 1.05, 7.0);
+    camera3.position.set(0, 1.05, 7.8);
 
     const root = new THREE.Group();
-    root.scale.setScalar(1.30);
+    root.scale.setScalar(1.05);
     root.rotation.set(-0.10, 0.35, 0);
     scene.add(root);
 
@@ -461,8 +508,21 @@
 
         uniform float uFadeIn;
         uniform float uFlash;
+        uniform float uHueShift;
 
-        void main(){
+        
+        // Hue rotation (RGB) around luminance axis
+        vec3 hueRotate(vec3 c, float a){
+          float s = sin(a);
+          float co = cos(a);
+          mat3 m = mat3(
+            0.213 + co*0.787 - s*0.213,  0.715 - co*0.715 - s*0.715,  0.072 - co*0.072 + s*0.928,
+            0.213 - co*0.213 + s*0.143,  0.715 + co*0.285 + s*0.140,  0.072 - co*0.072 - s*0.283,
+            0.213 - co*0.213 - s*0.787,  0.715 - co*0.715 + s*0.715,  0.072 + co*0.928 + s*0.072
+          );
+          return m * c;
+        }
+void main(){
           vec2 uv = gl_PointCoord.xy - 0.5;
           float d = length(uv);
 
@@ -488,6 +548,15 @@
           else if (vKind > 3.5) bright = 1.05;               // snow
 
           vec3 col = vColor * bright * (1.0 + uFlash*0.18) * 1.25;
+
+          // 旋转时变色：树/装饰/丝带/雪花都跟着变，树干保持原色
+          if (!(vKind > 2.5 && vKind < 3.5)) {
+            float hue = uHueShift;
+            // 丝带更“流彩”一点
+            hue += isRibbon * (0.25 + 0.35*vWave);
+            col = hueRotate(col, hue);
+          }
+
 
           // 丝带“流动”：亮度带跑动
           float flow = 0.72 + 0.70 * vWave; // 提高后会更像跑马灯
@@ -575,6 +644,8 @@
       lastT=t;
 
       uniforms.uTime.value = t;
+      // 旋转驱动的色相偏移：转得越多，颜色越变；也叠一点时间流动
+      uniforms.uHueShift.value = root.rotation.y * 0.55 + t * 0.25;
       if(started) uniforms.uFadeIn.value = Math.min(1, uniforms.uFadeIn.value + 0.05);
       else uniforms.uFadeIn.value = 0;
 
@@ -611,6 +682,7 @@
           `motion: ${cam.lastMotion.toFixed(1)}<br/>`+
           `thr: ${cam.thr.toFixed(1)} (base ${cam.baseline.toFixed(1)})<br/>`+
           `spread: ${spread.toFixed(2)} (tap ${tapBoost.toFixed(2)})<br/>`+
+          `hue: ${uniforms.uHueShift.value.toFixed(2)}<br/>`+
           `bias: ${cam.lastBias.toFixed(2)}<br/>`+
           `rotY: ${root.rotation.y.toFixed(2)} rotX: ${root.rotation.x.toFixed(2)}`;
       }
@@ -641,6 +713,11 @@
     }
 
     goBtn.addEventListener("click", startFlow);
+
+    // 兜底：如果浏览器仍拦截自动播放，任意一次触碰/点击页面再试一次
+    window.addEventListener("pointerdown", async ()=>{
+      if(!musicOn) await tryPlayMusic();
+    }, { passive:true, once:true });
     nameInput.addEventListener("keydown", (e)=>{ if(e.key==="Enter") startFlow(); });
     setTimeout(()=>nameInput.focus(), 150);
 
