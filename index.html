@@ -2,315 +2,684 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
-  <title>3D 粒子圣诞树</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>圣诞夜 · 粒子贺卡</title>
   <style>
-    html,body{height:100%;margin:0;background:#000;overflow:hidden;}
-    #hud{
-      position:fixed;left:12px;top:12px;z-index:10;
-      color:rgba(255,255,255,0.78);font:12px/1.3 system-ui,-apple-system,"PingFang SC";
-      background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);
-      padding:8px 10px;border-radius:12px;backdrop-filter:blur(8px);
+    :root{
+      --bg:#000;
+      --fg:#fff;
+      --muted:rgba(255,255,255,.72);
+      --stroke:rgba(255,255,255,.16);
+      --shadow:0 18px 60px rgba(0,0,0,.55);
+      --radius:18px;
     }
-    #hud b{color:#fff}
+    *{ box-sizing:border-box; }
+    html,body{
+      height:100%; margin:0; background:var(--bg); color:var(--fg);
+      font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans SC","Microsoft YaHei",system-ui,Segoe UI,Roboto,Helvetica,Arial;
+    }
+    body{ overflow:hidden; }
+    #stage{ position:fixed; inset:0; width:100vw; height:100vh; display:block; touch-action:none; }
+
+    #gate{
+      position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+      padding:24px;
+      background:radial-gradient(1200px 700px at 50% 40%, rgba(255,255,255,.06), rgba(0,0,0,1) 62%);
+      z-index:10;
+      opacity:1; transition:opacity .45s ease;
+    }
+    #gate.hide{ opacity:0; pointer-events:none; }
+
+    .card{
+      width:min(440px, 92vw);
+      background:linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.03));
+      border:1px solid var(--stroke);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      padding:18px 16px 16px;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+    .title{
+      font-size:16px; letter-spacing:.6px; color:rgba(255,255,255,.92);
+      display:flex; align-items:center; gap:10px; margin:0 0 10px;
+    }
+    .badge{
+      width:10px; height:10px; border-radius:50%;
+      background:rgba(255,255,255,.85);
+      box-shadow:0 0 18px rgba(255,255,255,.45);
+      flex:none;
+    }
+    .hint{ margin:0 0 12px; color:var(--muted); font-size:13px; line-height:1.55; }
+    .row{ display:flex; gap:10px; align-items:center; }
+    input{
+      flex:1; background:rgba(0,0,0,.55); color:var(--fg);
+      border:1px solid rgba(255,255,255,.18);
+      border-radius:14px; padding:12px 12px;
+      font-size:14px; outline:none;
+    }
+    input::placeholder{ color:rgba(255,255,255,.38); }
+    button{
+      background:rgba(255,255,255,.92); color:#000;
+      border:none; border-radius:14px; padding:12px 14px;
+      font-weight:800; font-size:14px; cursor:pointer;
+      box-shadow:0 10px 30px rgba(255,255,255,.14);
+    }
+    button:active{ transform:translateY(1px); }
+
+    /* 字幕条 */
+    #subs{
+      position:fixed;
+      left:50%;
+      bottom:max(16px, env(safe-area-inset-bottom));
+      transform:translateX(-50%);
+      width:min(820px, 94vw);
+      z-index:20;
+      pointer-events:none;
+      opacity:0;
+      transition:opacity .22s ease;
+    }
+    #subs.on{ opacity:1; }
+    .subline{
+      background:rgba(0,0,0,.62);
+      border:1px solid rgba(255,255,255,.12);
+      border-radius:16px;
+      padding:12px 14px;
+      box-shadow:0 14px 50px rgba(0,0,0,.65);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      font-size:15px; line-height:1.6; letter-spacing:.2px;
+      color:rgba(255,255,255,.92);
+      text-shadow:0 2px 16px rgba(0,0,0,.9);
+      min-height:48px;
+      display:flex; align-items:center;
+
+      transform:translateY(18px);
+      opacity:0;
+      transition:transform .32s cubic-bezier(.2,.9,.2,1), opacity .32s ease;
+    }
+    .subline.enter{ transform:translateY(0); opacity:1; }
+    .subline.exit{ transform:translateY(18px); opacity:0; }
+
+    .caret{
+      display:inline-block; width:10px; margin-left:3px; opacity:.9;
+      animation:blink 1s steps(1) infinite;
+    }
+    @keyframes blink { 50% { opacity:0; } }
+
+    /* 顶部提示 */
+    #cornerTip{
+      position:fixed;
+      top:max(14px, env(safe-area-inset-top));
+      left:50%;
+      transform:translateX(-50%);
+      z-index:15;
+      font-size:12px;
+      color:rgba(255,255,255,.55);
+      opacity:0;
+      transition:opacity .6s ease;
+      pointer-events:none;
+      letter-spacing:.3px;
+      text-shadow:0 2px 16px rgba(0,0,0,.8);
+      display:flex;
+      gap:10px;
+      align-items:center;
+      white-space:nowrap;
+    }
+    #cornerTip.on{ opacity:1; }
+
+    .pill{
+      padding:6px 10px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.14);
+      background:rgba(0,0,0,.35);
+      color:rgba(255,255,255,.62);
+      box-shadow:0 10px 30px rgba(0,0,0,.4);
+    }
+    .pill b{ color:rgba(255,255,255,.86); font-weight:800; }
+
+    /* 隐藏 video（摄像头输入） */
+    video#cam{
+      position:fixed;
+      width:1px; height:1px;
+      opacity:0;
+      pointer-events:none;
+      left:-10px; top:-10px;
+    }
   </style>
 </head>
+
 <body>
-  <div id="hud">拖动旋转 · 轻点闪烁<br><b>3D 粒子圣诞树</b></div>
+  <canvas id="stage"></canvas>
+  <video id="cam" playsinline muted></video>
 
-<script type="module">
-import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
-import { EffectComposer } from "https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/EffectComposer.js";
-import { RenderPass } from "https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/RenderPass.js";
-import { UnrealBloomPass } from "https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/UnrealBloomPass.js";
+  <div id="gate">
+    <div class="card">
+      <div class="title"><span class="badge"></span>圣诞夜 · 粒子贺卡</div>
+      <p class="hint">
+        输入名字，点“点亮”。会尝试开启摄像头：你挥手就能触发星光炸开（不开也没事，照样手指拖动旋转）。
+        <br/>提示：摄像头需要 HTTPS 或 localhost 才能工作。
+      </p>
+      <div class="row">
+        <input id="name" maxlength="12" placeholder="输入名字（例如：小猫咪）" />
+        <button id="go">点亮</button>
+      </div>
+    </div>
+  </div>
 
-const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x000000, 0.06);
+  <div id="cornerTip">
+    <span class="pill">拖动旋转 · 轻点炸开</span>
+    <span class="pill" id="camStatus">摄像头：<b>未开启</b></span>
+  </div>
 
-const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 200);
-camera.position.set(0, 1.4, 7.2);
+  <div id="subs">
+    <div class="subline" id="subline"></div>
+  </div>
 
-const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:false });
-renderer.setSize(innerWidth, innerHeight);
-renderer.setPixelRatio(Math.min(devicePixelRatio, 1.6)); // 手机别开太高
-renderer.setClearColor(0x000000, 1);
-document.body.appendChild(renderer.domElement);
+  <script type="module">
+    import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
 
-// ===== 后期发光 Bloom =====
-const composer = new EffectComposer(renderer);
-composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(
-  new THREE.Vector2(innerWidth, innerHeight),
-  1.25,   // strength
-  0.9,    // radius
-  0.08    // threshold（越低越容易发光）
-);
-composer.addPass(bloom);
+    const canvas = document.getElementById("stage");
+    const gate = document.getElementById("gate");
+    const goBtn = document.getElementById("go");
+    const nameInput = document.getElementById("name");
+    const subs = document.getElementById("subs");
+    const subline = document.getElementById("subline");
+    const cornerTip = document.getElementById("cornerTip");
+    const camEl = document.getElementById("cam");
+    const camStatus = document.getElementById("camStatus");
 
-// ===== 组：树 + 星 + 雪 =====
-const world = new THREE.Group();
-scene.add(world);
+    const sleep = (ms)=> new Promise(r=>setTimeout(r, ms));
 
-// 轻微“地面粒子”
-const ground = makeGroundSparkles();
-ground.position.y = -1.0;
-world.add(ground);
+    async function showSubtitle(text, typeSpeed=28, hold=900){
+      subs.classList.add("on");
+      subline.classList.remove("exit");
+      subline.classList.add("enter");
+      subline.innerHTML = "";
+      await sleep(240);
 
-// 粒子树
-const tree = makeParticleTree();
-tree.position.y = -0.8;
-world.add(tree);
+      const caret = document.createElement("span");
+      caret.className = "caret";
+      caret.textContent = "▍";
 
-// 星星
-const stars = makeStars(1100);
-world.add(stars);
+      for(let i=0;i<text.length;i++){
+        subline.textContent = text.slice(0, i+1);
+        subline.appendChild(caret);
+        await sleep(typeSpeed);
+      }
+      subline.textContent = text;
+      await sleep(hold);
 
-// 雪
-const snow = makeSnow(520);
-world.add(snow);
-
-// 顶部星星（mesh）
-const star = makeTopStar();
-star.position.set(0, 2.9, 0);
-world.add(star);
-
-// ===== 简易触控旋转（不用 OrbitControls）=====
-let dragging = false, lastX = 0, lastY = 0;
-let rotY = 0, rotX = 0, targetRotY = 0, targetRotX = 0;
-
-addEventListener("pointerdown", e => { dragging=true; lastX=e.clientX; lastY=e.clientY; }, {passive:true});
-addEventListener("pointerup",   () => { dragging=false; }, {passive:true});
-addEventListener("pointermove", e => {
-  if(!dragging) return;
-  const dx = (e.clientX - lastX) / innerWidth;
-  const dy = (e.clientY - lastY) / innerHeight;
-  lastX = e.clientX; lastY = e.clientY;
-  targetRotY += dx * 2.2;
-  targetRotX += dy * 1.2;
-  targetRotX = Math.max(-0.45, Math.min(0.45, targetRotX));
-}, {passive:true});
-
-// 轻点让树“闪一下”
-addEventListener("click", () => pulse = 1, {passive:true});
-
-// ===== 动画 =====
-let t = 0;
-let pulse = 0;
-
-function animate(){
-  t += 0.016;
-  pulse = Math.max(0, pulse - 0.04);
-
-  // 平滑旋转
-  rotY += (targetRotY - rotY) * 0.08;
-  rotX += (targetRotX - rotX) * 0.08;
-  world.rotation.y = rotY;
-  world.rotation.x = rotX;
-
-  // 树的“呼吸闪烁”
-  tree.material.opacity = 0.92 + 0.08*Math.sin(t*1.3) + pulse*0.25;
-  tree.material.size = baseTreeSize * (1.0 + 0.08*Math.sin(t*1.9) + pulse*0.25);
-
-  // 星星闪一点
-  stars.material.opacity = 0.55 + 0.25*Math.sin(t*0.5);
-
-  // 雪飘落
-  updateSnow(snow, t);
-
-  // 顶星旋转
-  star.rotation.y += 0.02;
-  star.rotation.z += 0.01;
-
-  composer.render();
-  requestAnimationFrame(animate);
-}
-const baseTreeSize = tree.material.size;
-requestAnimationFrame(animate);
-
-addEventListener("resize", () => {
-  camera.aspect = innerWidth/innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
-  composer.setSize(innerWidth, innerHeight);
-  bloom.setSize(innerWidth, innerHeight);
-}, {passive:true});
-
-// ======= 生成：粒子圣诞树 =======
-function makeParticleTree(){
-  // 手机性能：这个决定“密度”
-  const LEVELS = 180;     // 越大越细腻
-  const PER_LEVEL = 26;   // 每层点数
-  const EXTRA_HELIX = 260;// 螺旋灯带点数
-
-  const height = 3.6;
-  const baseR  = 1.65;
-
-  const positions = [];
-  const colors = [];
-
-  const greenA = new THREE.Color("#66ffb7");
-  const greenB = new THREE.Color("#13d66f");
-  const gold   = new THREE.Color("#ffd36a");
-  const red    = new THREE.Color("#ff4d7a");
-  const white  = new THREE.Color("#ffffff");
-
-  // 主体：锥体内点云
-  for(let i=0;i<LEVELS;i++){
-    const u = i/(LEVELS-1);
-    const y = u*height;
-    const r = Math.pow(1-u, 1.12) * baseR;
-
-    for(let k=0;k<PER_LEVEL;k++){
-      const a = Math.random()*Math.PI*2;
-      const rr = r * (0.35 + 0.75*Math.random());
-      const x = Math.cos(a)*rr + (Math.random()-0.5)*0.05;
-      const z = Math.sin(a)*rr + (Math.random()-0.5)*0.05;
-
-      positions.push(x, y, z);
-
-      // 颜色：底部更绿，上面更偏亮
-      const c = greenA.clone().lerp(greenB, u);
-      // 少量彩灯点缀
-      const p = Math.random();
-      if (p < 0.05) c.copy(red);
-      else if (p < 0.10) c.copy(gold);
-      else if (p < 0.115) c.copy(white);
-
-      colors.push(c.r, c.g, c.b);
+      subline.classList.remove("enter");
+      subline.classList.add("exit");
+      await sleep(320);
     }
-  }
 
-  // 螺旋灯带：让它像你图里那样“绕上去”
-  const turns = 7.5;
-  for(let i=0;i<EXTRA_HELIX;i++){
-    const u = i/(EXTRA_HELIX-1);
-    const y = u*height;
-    const r = Math.pow(1-u, 1.05) * (baseR*0.92);
-    const a = u * turns * Math.PI*2;
+    async function hideSubs(){
+      subline.classList.remove("enter");
+      subline.classList.add("exit");
+      await sleep(220);
+      subs.classList.remove("on");
+    }
 
-    const x = Math.cos(a)*r;
-    const z = Math.sin(a)*r;
-    positions.push(x, y, z);
+    // ---------- 摄像头：轻量“运动检测” ----------
+    const cam = {
+      enabled:false,
+      ready:false,
+      stream:null,
+      w:96, h:72,
+      c:null, ctx:null,
+      prev:null,
+      cooldown:0,
+      lastMotion:0
+    };
 
-    const c = new THREE.Color("#7CFF66").lerp(new THREE.Color("#FFF36A"), u*0.9);
-    colors.push(c.r, c.g, c.b);
-  }
+    function setCamStatus(text, ok=false){
+      camStatus.innerHTML = `摄像头：<b>${text}</b>`;
+      camStatus.querySelector("b").style.color = ok ? "rgba(120,255,190,.92)" : "rgba(255,255,255,.86)";
+      if(!ok && text.includes("拒绝")) camStatus.querySelector("b").style.color = "rgba(255,120,150,.92)";
+    }
 
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-  geo.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+    async function startCamera(){
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setCamStatus("不支持", false);
+        return false;
+      }
+      if (!window.isSecureContext) {
+        setCamStatus("需HTTPS", false);
+        return false;
+      }
+      try{
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode:"user", width:{ideal:640}, height:{ideal:480} },
+          audio: false
+        });
+        cam.stream = stream;
+        camEl.srcObject = stream;
+        await camEl.play();
 
-  const mat = new THREE.PointsMaterial({
-    size: 0.055,
-    vertexColors: true,
-    transparent: true,
-    opacity: 0.95,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-    sizeAttenuation: true
-  });
+        cam.c = document.createElement("canvas");
+        cam.c.width = cam.w;
+        cam.c.height = cam.h;
+        cam.ctx = cam.c.getContext("2d", { willReadFrequently:true });
 
-  const pts = new THREE.Points(geo, mat);
-  pts.position.y = 0;
-  return pts;
-}
+        cam.prev = new Uint8Array(cam.w * cam.h);
+        cam.ready = true;
+        cam.enabled = true;
+        setCamStatus("已开启", true);
+        return true;
+      }catch(e){
+        setCamStatus("被拒绝", false);
+        cam.ready = false;
+        cam.enabled = false;
+        return false;
+      }
+    }
 
-// 顶部星星（简单几何）
-function makeTopStar(){
-  const g = new THREE.IcosahedronGeometry(0.16, 0);
-  const m = new THREE.MeshBasicMaterial({ color: 0xFFD36A });
-  const s = new THREE.Mesh(g, m);
-  return s;
-}
+    function stopCamera(){
+      try{
+        cam.stream?.getTracks?.().forEach(t=>t.stop());
+      }catch(_){}
+      cam.stream = null;
+      cam.ready = false;
+      cam.enabled = false;
+      setCamStatus("未开启", false);
+    }
 
-// 星星背景
-function makeStars(n){
-  const positions = [];
-  for(let i=0;i<n;i++){
-    const r = 30 + Math.random()*70;
-    const a = Math.random()*Math.PI*2;
-    const b = Math.acos(THREE.MathUtils.randFloatSpread(2)); // roughly sphere
-    const x = r * Math.sin(b) * Math.cos(a);
-    const y = r * Math.cos(b) * 0.35 + 2.0; // 稍微抬高
-    const z = r * Math.sin(b) * Math.sin(a);
-    positions.push(x,y,z);
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-  const mat = new THREE.PointsMaterial({
-    size: 0.06,
-    color: 0xffffff,
-    transparent: true,
-    opacity: 0.65,
-    depthWrite: false
-  });
-  return new THREE.Points(geo, mat);
-}
+    // 运动检测：返回 {motion, bias} bias>0 代表右侧更“动”
+    function detectMotion(){
+      if(!cam.ready || !cam.enabled) return { motion:0, bias:0 };
 
-// 雪
-function makeSnow(n){
-  const positions = [];
-  const speeds = [];
-  for(let i=0;i<n;i++){
-    positions.push(
-      THREE.MathUtils.randFloatSpread(12),
-      Math.random()*6 - 0.2,
-      THREE.MathUtils.randFloatSpread(12)
+      cam.ctx.drawImage(camEl, 0, 0, cam.w, cam.h);
+      const img = cam.ctx.getImageData(0, 0, cam.w, cam.h).data;
+
+      let sum=0, sumL=0, sumR=0;
+      const step = 2; // 2像素采样一次，够快
+      for(let y=0;y<cam.h;y+=step){
+        for(let x=0;x<cam.w;x+=step){
+          const idx = y*cam.w + x;
+          const p = idx*4;
+          const lum = (img[p] + img[p+1] + img[p+2]) / 3; // 0..255
+          const prev = cam.prev[idx] || 0;
+          const diff = Math.abs(lum - prev);
+          cam.prev[idx] = lum;
+
+          sum += diff;
+          if(x < cam.w/2) sumL += diff;
+          else sumR += diff;
+        }
+      }
+
+      // 平均运动强度（经验值）
+      const samples = (Math.ceil(cam.h/step) * Math.ceil(cam.w/step));
+      const motion = sum / samples;               // 0..255 大致
+      const bias = sum > 1 ? (sumR - sumL) / sum : 0; // -1..1
+      return { motion, bias };
+    }
+
+    // ---------- Three.js ----------
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:false, powerPreference:"high-performance" });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight, false);
+
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.Fog(0x000000, 7, 24);
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 100);
+    camera.position.set(0, 1.05, 8.6);
+
+    const root = new THREE.Group();
+    scene.add(root);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.38));
+
+    const HEIGHT = 4.6;
+    const BASE_RADIUS = 2.2;
+    const LAYERS = 7;
+
+    const treeCols = ["#0B3D0B","#144514","#006400"].map(s=>new THREE.Color(s));
+    const decorCols = ["#FFD36A","#D4AF37","#8B0000","#6AA7FF"].map(s=>new THREE.Color(s));
+    const trunkCol = new THREE.Color("#3e2723");
+    const ribbonCol = new THREE.Color("#D4AF37");
+    const snowCol = new THREE.Color("#ffffff");
+
+    function randn(){
+      let u=0,v=0;
+      while(u===0) u=Math.random();
+      while(v===0) v=Math.random();
+      return Math.sqrt(-2.0*Math.log(u))*Math.cos(2.0*Math.PI*v);
+    }
+
+    const P=[], C=[], S=[], D=[], K=[], A=[], SP=[];
+    function addPoint(x,y,z, color, scale, kind, alpha, speed=0){
+      P.push(x,y,z);
+      C.push(color.r,color.g,color.b);
+      S.push(scale);
+      const dir = new THREE.Vector3(x,y,z).normalize();
+      D.push(dir.x,dir.y,dir.z);
+      K.push(kind);
+      A.push(alpha);
+      SP.push(speed);
+    }
+
+    // leaves
+    for(let i=0;i<9000;i++){
+      const h = Math.random();
+      const base_r = (1 - h);
+      const layer_cycle = (h * LAYERS) % 1;
+      const r = base_r * 0.65 * (0.4 + 0.6 * Math.pow(1 - layer_cycle, 0.7));
+      const theta = Math.random() * Math.PI * 2;
+
+      const x = r * Math.cos(theta) + randn()*0.045;
+      const z = r * Math.sin(theta) + randn()*0.045;
+      const y = (h - 0.5) * HEIGHT;
+
+      const col = treeCols[(Math.random()*treeCols.length)|0];
+      const size = 0.65 + Math.random()*1.25;
+      addPoint(x,y,z,col,size,0.0,0.92);
+    }
+
+    // trunk
+    for(let i=0;i<1200;i++){
+      const y = (-0.70 + Math.random()*0.25) * HEIGHT;
+      const r = 0.12;
+      const t = Math.random()*Math.PI*2;
+      const x = Math.cos(t)*r + randn()*0.01;
+      const z = Math.sin(t)*r + randn()*0.01;
+      addPoint(x,y,z,trunkCol,1.15,3.0,1.0);
+    }
+
+    // decor
+    for(let i=0;i<720;i++){
+      const h = Math.random()*0.95;
+      const base_r = (1 - h);
+      const layer_cycle = (h * LAYERS) % 1;
+      const r = base_r * 0.68 * (0.4 + 0.6 * Math.pow(1 - layer_cycle, 0.7));
+      const theta = Math.random()*Math.PI*2;
+
+      const x = r*Math.cos(theta);
+      const z = r*Math.sin(theta);
+      const y = (h - 0.5)*HEIGHT;
+
+      const col = decorCols[(Math.random()*decorCols.length)|0];
+      const size = 1.35 + Math.random()*1.35;
+      addPoint(x,y,z,col,size,1.0,1.0);
+    }
+
+    // ribbon
+    for(let i=0;i<6500;i++){
+      const h = (i/(6500-1))*0.95;
+      const base_r = (1 - h) * 0.65 * 1.05;
+      const theta = 10 * Math.PI * h;
+      const x = base_r*Math.cos(theta);
+      const z = base_r*Math.sin(theta);
+      const y = (h - 0.5)*HEIGHT;
+      addPoint(x,y,z,ribbonCol,1.00,2.0,0.92);
+    }
+
+    // snow
+    for(let i=0;i<260;i++){
+      const x = (Math.random()*2 - 1) * 1.25;
+      const z = (Math.random()*2 - 1) * 1.25;
+      const y0 = (-0.9 + Math.random()*2.2) * (HEIGHT*0.55);
+      const speed = 0.30 + Math.random()*0.55;
+      const size = 0.55 + Math.random()*1.35;
+      addPoint(x,y0,z,snowCol,size,4.0,0.50 + Math.random()*0.35,speed);
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("aBase",  new THREE.BufferAttribute(new Float32Array(P), 3));
+    geometry.setAttribute("aColor", new THREE.BufferAttribute(new Float32Array(C), 3));
+    geometry.setAttribute("aScale", new THREE.BufferAttribute(new Float32Array(S), 1));
+    geometry.setAttribute("aDir",   new THREE.BufferAttribute(new Float32Array(D), 3));
+    geometry.setAttribute("aKind",  new THREE.BufferAttribute(new Float32Array(K), 1));
+    geometry.setAttribute("aAlpha", new THREE.BufferAttribute(new Float32Array(A), 1));
+    geometry.setAttribute("aSpeed", new THREE.BufferAttribute(new Float32Array(SP), 1));
+
+    const uniforms = {
+      uTime:   { value: 0 },
+      uSize:   { value: 5.0 },
+      uBurst:  { value: 0 },
+      uFadeIn: { value: 0 }
+    };
+
+    const material = new THREE.ShaderMaterial({
+      transparent:true,
+      depthWrite:false,
+      blending:THREE.NormalBlending,
+      uniforms,
+      vertexShader: `
+        attribute vec3 aBase;
+        attribute vec3 aColor;
+        attribute float aScale;
+        attribute vec3 aDir;
+        attribute float aKind;
+        attribute float aAlpha;
+        attribute float aSpeed;
+
+        varying vec3 vColor;
+        varying float vTw;
+        varying float vAlpha;
+        varying float vKind;
+
+        uniform float uTime;
+        uniform float uSize;
+        uniform float uBurst;
+        uniform float uFadeIn;
+
+        void main(){
+          vColor = aColor;
+          vKind = aKind;
+          vAlpha = aAlpha;
+
+          float seed = aBase.y*2.6 + aBase.x*3.1 + aBase.z*2.9;
+          float twBase = 0.55 + 0.45 * sin(uTime*1.7 + seed);
+
+          float amp = 0.22;
+          if (aKind < 0.5) amp = 0.20;
+          else if (aKind < 1.5) amp = 0.40;
+          else if (aKind < 2.5) amp = 0.30;
+          else if (aKind < 3.5) amp = 0.10;
+          else amp = 0.12;
+          vTw = 0.78 + twBase * amp;
+
+          vec3 p = aBase;
+
+          if (aKind > 3.5) {
+            float fall = mod(uTime * aSpeed, 6.0);
+            p.y = aBase.y - fall;
+            if (p.y < -3.2) p.y += 6.0;
+          } else {
+            p += aDir * (uBurst * 0.85);
+          }
+
+          vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
+          float distScale = 220.0 / max(1.0, -mvPosition.z);
+
+          float ps = aScale * uSize * distScale * vTw * uFadeIn;
+          gl_PointSize = clamp(ps, 1.0, 12.0);
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        precision highp float;
+        varying vec3 vColor;
+        varying float vTw;
+        varying float vAlpha;
+        varying float vKind;
+        uniform float uFadeIn;
+
+        void main(){
+          vec2 uv = gl_PointCoord.xy - 0.5;
+          float d = length(uv);
+          float core = smoothstep(0.22, 0.0, d);
+          float halo = smoothstep(0.58, 0.30, d) * 0.14;
+
+          float a = (core * 0.92 + halo) * vAlpha * (0.72 + vTw*0.28) * uFadeIn;
+
+          float bright = 1.0;
+          if (vKind > 0.5 && vKind < 1.5) bright = 1.10;
+          else if (vKind > 1.5 && vKind < 2.5) bright = 1.02;
+          else if (vKind > 2.5 && vKind < 3.5) bright = 0.74;
+          else if (vKind > 3.5) bright = 0.95;
+
+          vec3 col = vColor * bright;
+
+          if (a < 0.01) discard;
+          gl_FragColor = vec4(col, a);
+        }
+      `
+    });
+
+    const points = new THREE.Points(geometry, material);
+    root.add(points);
+
+    const star = new THREE.Mesh(
+      new THREE.SphereGeometry(0.06, 16, 16),
+      new THREE.MeshBasicMaterial({ color: 0xffffff })
     );
-    speeds.push(0.25 + Math.random()*0.75);
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-  geo.setAttribute("speed", new THREE.Float32BufferAttribute(speeds, 1));
-  const mat = new THREE.PointsMaterial({
-    size: 0.06,
-    color: 0xffffff,
-    transparent: true,
-    opacity: 0.75,
-    depthWrite: false
-  });
-  const pts = new THREE.Points(geo, mat);
-  pts.userData.speeds = speeds;
-  return pts;
-}
+    star.position.set(0, HEIGHT*0.52 + 0.25, 0);
+    root.add(star);
 
-function updateSnow(pts, tt){
-  const pos = pts.geometry.attributes.position;
-  const speeds = pts.geometry.attributes.speed;
-  for(let i=0;i<pos.count;i++){
-    pos.setY(i, pos.getY(i) - speeds.getX(i)*0.03);
-    pos.setX(i, pos.getX(i) + Math.sin(tt*0.6 + i)*0.0008);
-    if(pos.getY(i) < -1.0){
-      pos.setY(i, 6.0 + Math.random()*1.5);
-      pos.setX(i, THREE.MathUtils.randFloatSpread(12));
-      pos.setZ(i, THREE.MathUtils.randFloatSpread(12));
+    root.rotation.y = 0.38;
+
+    // ---------- 触摸互动（保底） ----------
+    let started = false;
+    let isDown = false;
+    let lastX = 0;
+    let rotTarget = root.rotation.y;
+    let tapStart = 0;
+    let moved = 0;
+
+    function onDown(e){
+      isDown = true;
+      moved = 0;
+      tapStart = performance.now();
+      lastX = (e.touches ? e.touches[0].clientX : e.clientX);
     }
-  }
-  pos.needsUpdate = true;
-}
+    function onMove(e){
+      if(!isDown) return;
+      const x = (e.touches ? e.touches[0].clientX : e.clientX);
+      const dx = x - lastX;
+      lastX = x;
+      moved += Math.abs(dx);
+      rotTarget += dx * 0.006;
+    }
+    function onUp(){
+      if(!isDown) return;
+      isDown = false;
+      const dt = performance.now() - tapStart;
+      if(dt < 230 && moved < 10) burstPulse();
+    }
 
-// 地面粒子
-function makeGroundSparkles(){
-  const n = 600;
-  const positions = [];
-  for(let i=0;i<n;i++){
-    const x = THREE.MathUtils.randFloatSpread(10);
-    const z = THREE.MathUtils.randFloatSpread(10);
-    const y = -0.02 + Math.random()*0.05;
-    positions.push(x,y,z);
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-  const mat = new THREE.PointsMaterial({
-    size: 0.05,
-    color: 0x66ffb7,
-    transparent: true,
-    opacity: 0.35,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending
-  });
-  return new THREE.Points(geo, mat);
-}
-</script>
+    canvas.addEventListener("pointerdown", onDown, { passive:true });
+    window.addEventListener("pointermove", onMove, { passive:true });
+    window.addEventListener("pointerup", onUp, { passive:true });
+    canvas.addEventListener("touchstart", onDown, { passive:true });
+    window.addEventListener("touchmove", onMove, { passive:true });
+    window.addEventListener("touchend", onUp, { passive:true });
+
+    let burstV = 0, burstT = 0;
+    function burstPulse(){ burstT = 1; }
+
+    // ---------- 渲染 ----------
+    let t0 = performance.now();
+    let lastT = 0;
+
+    function animate(){
+      requestAnimationFrame(animate);
+      const t = (performance.now() - t0) / 1000;
+      const dt = Math.min(0.05, Math.max(0.001, t - lastT));
+      lastT = t;
+
+      uniforms.uTime.value = t;
+
+      if(started) uniforms.uFadeIn.value = Math.min(1, uniforms.uFadeIn.value + 0.02);
+      else uniforms.uFadeIn.value = 0;
+
+      // 摄像头控制（如果已开启）
+      if(started && cam.enabled && cam.ready){
+        cam.cooldown = Math.max(0, cam.cooldown - dt);
+        const { motion, bias } = detectMotion();
+
+        // motion 阈值：大一点才算“挥手”
+        // 想更敏感：把 18 降到 14；想更稳：升到 22
+        const THRESH = 18;
+
+        // 左右挥动带动旋转
+        // bias 范围 -1..1，乘一个小系数就够了
+        rotTarget += bias * 0.06;
+
+        // 挥手触发炸开（带冷却）
+        if(motion > THRESH && cam.cooldown <= 0){
+          burstPulse();
+          cam.cooldown = 0.45;
+        }
+      }
+
+      root.rotation.y += (rotTarget - root.rotation.y) * 0.08;
+      root.rotation.y += Math.sin(t*0.18) * 0.0006;
+
+      const s = 0.92 + 0.08*Math.sin(t*2.2);
+      star.scale.setScalar(s);
+
+      if(burstT > 0){
+        burstV = Math.min(1, burstV + 0.18);
+        if(burstV >= 1) burstT = -1;
+      }else if(burstT < 0){
+        burstV = Math.max(0, burstV - 0.10);
+        if(burstV <= 0) burstT = 0;
+      }
+      uniforms.uBurst.value = burstV;
+
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    // ---------- 启动流程 ----------
+    async function startFlow(){
+      const raw = (nameInput.value || "").trim();
+      const who = raw ? raw : "你";
+
+      // 先申请摄像头（用户点击触发，成功率更高）
+      // 失败也没关系，照样继续
+      await startCamera();
+
+      gate.classList.add("hide");
+      await sleep(380);
+      gate.style.display = "none";
+
+      await showSubtitle(`${who}，圣诞夜我在你身边。`, 28, 900);
+      await showSubtitle(`你点亮我，我才有光。`, 28, 900);
+
+      if (cam.enabled && cam.ready){
+        await showSubtitle(`挥手触发星光炸开，或拖动旋转这棵树。`, 24, 850);
+      } else {
+        await showSubtitle(`拖动旋转，轻点让星光炸开。`, 24, 850);
+      }
+
+      started = true;
+      cornerTip.classList.add("on");
+      await hideSubs();
+    }
+
+    goBtn.addEventListener("click", startFlow);
+    nameInput.addEventListener("keydown", (e)=>{ if(e.key==="Enter") startFlow(); });
+    setTimeout(()=> nameInput.focus(), 180);
+
+    function onResize(){
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+    }
+    window.addEventListener("resize", onResize);
+    window.addEventListener("orientationchange", onResize);
+
+    // 页面隐藏时停摄像头（省电也更礼貌）
+    document.addEventListener("visibilitychange", ()=>{
+      if(document.hidden) stopCamera();
+    });
+  </script>
 </body>
 </html>
