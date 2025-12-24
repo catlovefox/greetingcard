@@ -401,11 +401,13 @@
     geometry.computeBoundingSphere();
 
     const uniforms = {
-      uTime:{value:0},
+uTime:{value:0},
       uSize:{value:6.2},
       uSpread:{value:0},   // 0=聚拢 1=散开（由挥手/点击驱动）
       uFadeIn:{value:0},
       uFlash:{value:0}
+    
+      uHueShift:{value:0},  // 旋转驱动的色相偏移
     };
 
     const material = new THREE.ShaderMaterial({
@@ -472,9 +474,25 @@
             // 丝带散开稍弱一点，否则像断掉
             if (aKind > 1.5 && aKind < 2.5) s *= 0.75;
 
-            p += aDir * (s * 1.85);
+                        // —— 消散：不是单纯膨胀，而是随机飘散 + 轻微涡旋；聚拢：s 下降会自然回到 aBase ——
+            float r1 = fract(sin(seed*12.9898) * 43758.5453);
+            float r2 = fract(sin((seed+1.234)*78.233) * 43758.5453);
+            float r3 = fract(sin((seed+4.567)*39.425) * 43758.5453);
+            vec3 rnd = normalize(vec3(r1-0.5, r2-0.5, r3-0.5) + 0.0001);
+            vec3 tangent = normalize(vec3(-aBase.z, 0.0, aBase.x) + 0.0001);
+            vec3 swirl = normalize(cross(rnd, vec3(0.0,1.0,0.0)) + 0.0001);
 
-            // 丝带沿切线轻轻“滑动”，更像流动
+            float kindAmp = 1.0;
+            if (aKind < 0.5) kindAmp = 1.00;        // tree
+            else if (aKind < 1.5) kindAmp = 1.25;   // decor 更散一点
+            else if (aKind < 2.5) kindAmp = 0.92;   // ribbon 稍克制
+            else if (aKind < 3.5) kindAmp = 0.45;   // trunk 很轻
+
+            float drift = 0.70 + 0.30 * sin(uTime*2.3 + seed*1.7);
+            vec3 scatterDir = normalize(rnd*0.85 + swirl*0.45 + tangent*0.35 + aDir*0.15 + vec3(0.0,0.22,0.0));
+            vec3 scattered = aBase + scatterDir * (s * 2.35 * kindAmp * drift);
+            p = mix(aBase, scattered, s);
+// 丝带沿切线轻轻“滑动”，更像流动
             if (aKind > 1.5 && aKind < 2.5) {
               vec3 tangent = normalize(vec3(-aBase.z, 0.0, aBase.x));
               p += tangent * (0.03 * sin(uTime*2.2 + aBase.y*6.0));
@@ -645,7 +663,7 @@ void main(){
 
       uniforms.uTime.value = t;
       // 旋转驱动的色相偏移：转得越多，颜色越变；也叠一点时间流动
-      uniforms.uHueShift.value = root.rotation.y * 0.55 + t * 0.25;
+      if (uniforms.uHueShift) uniforms.uHueShift.value = root.rotation.y * 0.55 + t * 0.25;
       if(started) uniforms.uFadeIn.value = Math.min(1, uniforms.uFadeIn.value + 0.05);
       else uniforms.uFadeIn.value = 0;
 
@@ -694,6 +712,8 @@ void main(){
       const raw = (nameInput.value || "").trim();
       const who = raw ? raw : "你";
 
+      try{
+
       await startCamera(); // 成功就挥手散开，不成功也可点击散开
 
       gate.classList.add("hide");
@@ -710,6 +730,11 @@ void main(){
       await hideSubs();
       tapBoost = 0.8; // 开场给一口气
       uniforms.uFlash.value = 0.9;
+      }catch(err){
+        console.error(err);
+        // 如果点亮没反应，至少把原因写到字幕里
+        await showSubtitle("点亮失败：请打开控制台看报错（常见是 shader/uniform 或三方资源加载失败）", 12, 1400);
+      }
     }
 
     goBtn.addEventListener("click", startFlow);
